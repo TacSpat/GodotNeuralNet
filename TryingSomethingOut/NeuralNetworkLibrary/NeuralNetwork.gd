@@ -36,7 +36,7 @@ func initialize_weights():
 	# Calculate the total number of layers in the network
 	var num_layers = num_hidden_layers + 1
 	
-	# Initialize weights for each layer
+	# Initialize weights and biases for each layer
 	for layer_idx in range(num_layers):
 		var input_size
 		var output_size
@@ -69,134 +69,153 @@ func initialize_weights():
 			layer_weights.append(neuron_weights)
 			
 		weights.append(layer_weights)  # Store the layer weights in the instance variable
+		
+		#init the biases with random values
+		var layer_biases = []
+		for i in range(output_size):
+			var bias = randf_range(-weight_range, weight_range)
+			layer_biases.append(bias)
+		
+		biases.append(layer_biases)
 
 func sigmoid(x):
 	return 1.0 / (1.0 + exp(-x))
 
 func forward_propagation(inputs):
-	var outputs = inputs
+	var layer_outputs = inputs
 	
-	for layer_weights in weights:
-		var layer_outputs = []
-		for neuron_weights in layer_weights:
-			var weighted_sum = 0.0
-			for i in range(len(outputs)):
-				weighted_sum += neuron_weights[i] * outputs[i]
-				
-			# Apply activation function
-			var activation_result = sigmoid(weighted_sum)
-			
-			layer_outputs.append(activation_result)
-			
-		outputs = layer_outputs
-		
-	return outputs
-
-
-func back_propagation(inputs, expected_output, learning_rate):
-	#init gradients for wights and biases
-	var weight_gradients = []
-	var bia_gradients = []
-	
-	#calculate the error of the output layer
-	var output_layer_idx = num_hidden_layers
-	var output_layer = forward_propagation(inputs)
-	var output_errors = []
-	for i in range(num_outputs):
-		var error = expected_output[i] - output_layer[i]
-		output_errors.append(error)
-	
-	#backpropagate the errors and calculate the gradients
-	for layer_idx in range(num_hidden_layers, -1, -1):
-		var layer_weights = weights[layer_idx]
-		var layer_outputs = []
-		if layer_idx == num_hidden_layers:
-			layer_outputs = output_layer
-		else:
-			layer_outputs = forward_propagation(layer_outputs)
-		
-		var layer_gradients = []
-		for neuron_idx in range(len(layer_weights)):
-			var neuron_weights = layer_weights[neuron_idx]
-			var neuron_gradient = 0.0
-			
-			for i in range(len(output_errors)):
-				var output_error = output_errors[i]
-				var weight = neuron_weights[i]
-				neuron_gradient += output_error * weight
-			
-			#calculate the gradient for the neuron's activation function
-			var neuron_output = layer_outputs[neuron_idx]
-			neuron_gradient *= neuron_output * (1.0 - neuron_output)
-			
-			#update the gradients for the neuron's weights and biases
-			var neuron_weight_gradients = []
-			for i in range(len(neuron_weights)):
-				var weight_gradient = neuron_gradient * layer_outputs[i]
-				neuron_weight_gradients.append(weight_gradient)
-				neuron_weights[i] += learning_rate * weight_gradient
-			
-			layer_gradients.append(neuron_weight_gradients)
-			
-		#store the gradients for the layer
-		weight_gradients.insert(0, layer_gradients)
-		
-	#update the weight and bianses using the calculated gradients
 	for layer_idx in range(num_hidden_layers + 1):
 		var layer_weights = weights[layer_idx]
-		var layer_weight_gradients = weight_gradients[layer_idx]
+		var layer_biases = biases[layer_idx]
 		
+		var next_layer_outputs = []
 		for neuron_idx in range(len(layer_weights)):
 			var neuron_weights = layer_weights[neuron_idx]
-			var neuron_weight_gradients = layer_weight_gradients[neuron_idx]
+			var neuron_bias = layer_biases[neuron_idx]
 			
-			for i in range (len(neuron_weights)):
-				neuron_weights[i] += learning_rate * neuron_weight_gradients[i]
+			var neuron_output = 0.0
+			for i in range(len(inputs)):
+				neuron_output += inputs[i] * neuron_weights[i]
+				
+			neuron_output += neuron_bias
+			neuron_output = sigmoid(neuron_output)
+			
+			next_layer_outputs.append(neuron_output)
 		
-
-#func back_propogation(inputs,expected_outputs, learning_rate):
-#	#perform forward propogation
-#	var outputs = forward_propagation(inputs)
-#
-#	#init empty lists to store gradients of weights and biases
+		layer_outputs = next_layer_outputs
+	
+	return layer_outputs
+			
+			
+func back_propagation(inputs, expected_output, learning_rate):
+	var layer_outputs = forward_propagation(inputs)
+	var num_layers = num_hidden_layers + 1
+	
+	#calculate the error for the output layer
+	var output_errors = []
+	for i in range(num_outputs):
+		var output = layer_outputs[i]
+		var error = (expected_output[i] - output) * output * (1.0 - output)
+		output_errors.append(error)
+		
+	#update the weights and biases for the output layer
+	var output_layer_weights = weights[num_layers - 1]
+	for i in range(num_outputs):
+		var neuron_weights = output_layer_weights[i]
+		var neuron_bias = biases[num_layers - 1][i]
+		for j in range(len(neuron_weights)):
+			neuron_weights[j] += learning_rate * output_errors[i] * layer_outputs[j]
+		neuron_bias += learning_rate * output_errors[i]
+		
+	#calculate the errors and update the weights for hidden layers
+	for layer_idx in range(num_layers -2, -1, -1):
+		var layer_weights = weights[layer_idx]
+		var next_layer_weights = weights[layer_idx + 1]
+		var next_layer_errors = []
+		
+		for i in range(len(layer_weights)):
+			var neuron_weights = layer_weights[i]
+			var error = 0.0
+			
+			for j in range(len(layer_weights)):
+				var next_neuron_weights = next_layer_weights[j]
+				var next_neuron_error = next_layer_errors[j]
+				error += next_layer_weights[i] * next_neuron_error
+				
+			var neuron_output = layer_outputs[i]
+			error += neuron_output * (1.0 - neuron_output)
+			next_layer_errors.append(error)
+			
+			var neuron_bias = biases[layer_idx][i]
+			for j in range(len(neuron_weights)):
+				neuron_weights[j] += learning_rate * error * inputs[j]
+			neuron_bias += learning_rate * error
+		
+		#update the weights and biases for the first hidden layer
+		var first_layer_weights = weights[0]
+		for i in range(len(first_layer_weights)):
+			var neuron_weights = first_layer_weights[i]
+			var neuron_bias = biases[0][i]
+			for j in range(len(neuron_weights)):
+				neuron_weights[j] += learning_rate * next_layer_errors[i] * inputs[j]
+			neuron_bias += learning_rate * next_layer_errors[i]
+		
+#func back_propagation(inputs, expected_output, learning_rate):
+#	#init gradients for wights and biases
 #	var weight_gradients = []
 #	var bias_gradients = []
 #
-#	#calculate the error at the output layer
+#	#calculate the error of the output layer
+#	var output_layer_idx = num_hidden_layers
+#	var output_layer = forward_propagation(inputs)
 #	var output_errors = []
 #	for i in range(num_outputs):
-#		var output_error = outputs[i] - expected_outputs[i]
-#		output_errors.append(output_error)
+#		var error = expected_output[i] - output_layer[i]
+#		output_errors.append(error)
 #
-#	#calculate gradients for the output layer
-#	var output_gradients = []
-#	for i in range(num_outputs):
-#		var gradient = output_errors[i] * outputs[i] * (1.0 - outputs[i])
-#		output_gradients.append(gradient)
+#	#backpropagate the errors and calculate the gradients
+#	for layer_idx in range(num_hidden_layers, -1, -1):
+#		var layer_weights = weights[layer_idx]
+#		var layer_outputs = forward_propagation(inputs)
+#		if layer_idx == num_hidden_layers:
+#			layer_outputs = output_layer
 #
-#	#store the gradients for the output layer
-#	weight_gradients.push_back(output_gradients)
+#		var layer_gradients = []
+#		for neuron_idx in range(len(layer_weights)):
+#			var neuron_weights = layer_weights[neuron_idx]
+#			var neuron_gradient = 0.0
 #
-#	#iterate over the hidden layers in reverse order
-#	for layer_idx in range(num_hidden_layers, 0, -1):
-#		var hidden_gradients = []
+#			for i in range(len(output_errors)):
+#				var output_error = output_errors[i]
+#				var weight = neuron_weights[i]
+#				neuron_gradient += output_error * weight
 #
-#		#calculate the gradients for the neurons in the current hidden layer
-#		for neuron_idx in range(neurons_per_hidden_layer[layer_idx - 1]):
-#			var gradient = 0.0
-#			for next_neuron_idx in range(neurons_per_hidden_layer[layer_idx - 1]):
-#				gradient += weights[layer_idx][next_neuron_idx][neuron_idx] * weight_gradients[0][next_neuron_idx]
+#			#calculate the gradient for the neuron's activation function
+#			var neuron_output = layer_outputs[neuron_idx]
 #
-#			var output = outputs[layer_idx][neuron_idx]
-#			gradient *= output * (1.0 - output)
+#			neuron_gradient *= neuron_output * (1.0 - neuron_output)
 #
-#			hidden_gradients.append(gradient)
+#			#update the gradients for the neuron's weights and biases
+#			var neuron_weight_gradients = []
+#			for i in range(len(neuron_weights)):
+#				var weight_gradient = neuron_gradient * inputs[i]
+#				neuron_weight_gradients.append(weight_gradient)
+#				neuron_weights[i] += learning_rate * weight_gradient
 #
-#		#store the gradients for the current hidden layer
-#		weight_gradients.insert(0, hidden_gradients)
+#			layer_gradients.append(neuron_weight_gradients)
 #
-#	#update the weights and biases using the gradients
+#		#store the gradients for the layer
+#		weight_gradients.insert(0, layer_gradients)
+#
+#	#update the weight and bianses using the calculated gradients
 #	for layer_idx in range(num_hidden_layers + 1):
-#		for neuron_idx in range(neurons_per_hidden_layer[layer_idx]):
-#			for weight_idx in range(len(weights[layer_idx][neuron_idx])):
-#				weights[layer_idx][neuron_idx][weight_idx] -= learning_rate * weight_gradients[0][neuron_idx - 1]
+#		var layer_weights = weights[layer_idx]
+#		var layer_weight_gradients = weight_gradients[layer_idx]
+#
+#		for neuron_idx in range(len(layer_weights)):
+#			var neuron_weights = layer_weights[neuron_idx]
+#			var neuron_weight_gradients = layer_weight_gradients[neuron_idx]
+#
+#			for i in range (len(neuron_weights)):
+#				neuron_weights[i] += learning_rate * neuron_weight_gradients[i]
+#

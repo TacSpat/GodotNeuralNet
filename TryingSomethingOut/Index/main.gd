@@ -4,7 +4,7 @@ extends Node2D
 @export var num_hidden_layers = 1
 @export var neurons_per_hidden_layer = [4]
 @export var num_outputs = 1
-@export var learning_rate = 0.5
+@export var learning_rate = 0.3
 @export var num_epochs = 10000
 
 var training_inputs = [
